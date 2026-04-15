@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BountyPlay - Inbox Defense Training</title>
+  <link rel="stylesheet" href="css/email.css">
+</head>
+<body>
+
+  <!-- ================= BRIEFING SCREEN ================= -->
+  <div id="briefingScreen" class="screen active">
+    <div class="center-box">
+      <div class="brief-badge">Security Awareness Simulation</div>
+      <h1>Inbox Defense Training</h1>
+      <p>Review each email, inspect suspicious clues, classify the message, and choose the safest response.</p>
+
+      <div class="brief-points">
+        <div class="brief-card">
+          <strong>Step 1</strong>
+          <span>Open the email and inspect suspicious clues</span>
+        </div>
+        <div class="brief-card">
+          <strong>Step 2</strong>
+          <span>Decide whether the email is phishing or safe</span>
+        </div>
+        <div class="brief-card">
+          <strong>Step 3</strong>
+          <span>Choose the safest action and review the impact</span>
+        </div>
+      </div>
+
+      <div class="difficulty-row">
+        <span class="difficulty-label">Mode:</span>
+        <span class="difficulty-chip active">Advanced</span>
+      </div>
+
+      <button class="primary-btn" onclick="startTraining()">Start Training</button>
+    </div>
+  </div>
+
+  <!-- ================= GAME SCREEN ================= -->
+  <div id="gameScreen" class="screen">
+    <div id="tutorialOverlay"></div>
+
+    <div id="tutorialModal" class="tutorial-modal">
+      <div class="tutorial-box">📩 Check this email first</div>
+    </div>
+
+    <div class="topbar">
+      <img src="image/logo1.png" alt="BountyPlay Logo" class="logo-small">
+
+      <div class="hud">
+        <span>Score: <b id="score">0</b></span>
+        <span>Progress: <b id="progress">1/5</b></span>
+        <span>Mistakes: <b id="mistakes">0/4</b></span>
+      </div>
+    </div>
+
+    <div class="mail-layout">
+      <div class="sidebar">
+        <div class="compose-btn">✏️ Compose</div>
+
+        <div class="menu">
+          <div class="menu-item active">📥 Inbox <span>5</span></div>
+          <div class="menu-item">⭐ Starred</div>
+          <div class="menu-item">🕒 Snoozed</div>
+          <div class="menu-item">📤 Sent</div>
+          <div class="menu-item">📄 Drafts</div>
+          <div class="menu-item">🗑 Trash</div>
+        </div>
+
+        <div class="upgrade">Awareness Mode</div>
+      </div>
+
+      <div class="mail-content">
+        <div class="gmail-topbar">
+          <input type="text" placeholder="Search mail" readonly>
+        </div>
+
+        <div class="gmail-tabs">
+          <span class="active">Primary</span>
+          <span>Promotions</span>
+          <span>Social</span>
+        </div>
+
+        <div class="progress-wrap">
+          <div class="progress-bar">
+            <div id="progressFill"></div>
+          </div>
+        </div>
+
+        <!-- ===== EMAIL LIST ===== -->
+        <div id="emailList" class="email-list">
+          <div id="firstEmail" class="email-item clickable-mail unread" onclick="openEmail(0)">
+            <span class="sender">Google</span>
+            <span class="subject">Security Alert: Suspicious Sign-in Attempt</span>
+            <span class="time">Now</span>
+          </div>
+
+          <div class="email-item clickable-mail unread" onclick="openEmail(1)">
+            <span class="sender">Security Bank</span>
+            <span class="subject">Account Verification Required</span>
+            <span class="time">Now</span>
+          </div>
+
+          <div class="email-item clickable-mail unread" onclick="openEmail(2)">
+            <span class="sender">CEO Office</span>
+            <span class="subject">Urgent request before my meeting</span>
+            <span class="time">8:54 AM</span>
+          </div>
+
+          <div class="email-item clickable-mail unread" onclick="openEmail(3)">
+            <span class="sender">FlashExpress</span>
+            <span class="subject">Your parcel is on hold</span>
+            <span class="time">8:22 AM</span>
+          </div>
+
+          <div class="email-item clickable-mail unread" onclick="openEmail(4)">
+            <span class="sender">Maya</span>
+            <span class="subject">Your transaction receipt</span>
+            <span class="time">7:41 AM</span>
+          </div>
+        </div>
+
+        <!-- ===== EMAIL VIEW ===== -->
+        <div id="emailView" style="display:none;">
+          <div class="gmail-email-top">
+            <button class="back-btn" onclick="goBack()">←</button>
+            <button class="analyze-btn" onclick="openDecisionModal()">Analyze Email</button>
+            <button class="report-btn" onclick="quickReport()">🚨 Report Phishing</button>
+          </div>
+
+          <h1 id="emailSubject" class="gmail-subject"></h1>
+
+          <div class="gmail-sender-row">
+            <div class="gmail-avatar">👤</div>
+
+            <div class="gmail-sender-info">
+              <strong id="emailSender"></strong>
+              <span class="gmail-to">to me</span>
+            </div>
+
+            <div class="gmail-time" id="emailTimestamp">Just now</div>
+          </div>
+
+          <div id="emailBody" class="gmail-body"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= DECISION MODAL ================= -->
+  <div id="decisionModal" class="modal">
+    <div class="modal-box decision-box">
+      <h3>Analyze This Email</h3>
+      <p class="decision-subtext">Classify the email, then choose the safest response.</p>
+
+      <div class="decision-section">
+        <label class="decision-label">1. Is this email phishing or safe?</label>
+        <div class="decision-grid">
+          <button id="classifyPhishingBtn" class="choice-btn" onclick="setClassification('phishing')">Phishing</button>
+          <button id="classifySafeBtn" class="choice-btn" onclick="setClassification('safe')">Safe</button>
+        </div>
+      </div>
+
+      <div class="decision-section">
+        <label class="decision-label">2. What would you do?</label>
+        <div class="decision-grid action-grid">
+          <button id="actionReportBtn" class="choice-btn" onclick="setAction('report')">Report</button>
+          <button id="actionDeleteBtn" class="choice-btn" onclick="setAction('delete')">Delete</button>
+          <button id="actionKeepBtn" class="choice-btn" onclick="setAction('keep')">Keep</button>
+          <button id="actionReplyBtn" class="choice-btn" onclick="setAction('reply')">Reply</button>
+        </div>
+      </div>
+
+      <div class="modal-actions">
+        <button class="secondary-btn" onclick="closeDecisionModal()">Cancel</button>
+        <button class="primary-btn" onclick="submitDecision()">Submit Decision</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= SAFE FAKE LOGIN SIMULATION ================= -->
+  <div id="loginSimModal" class="modal">
+    <div class="modal-box login-sim-box">
+      <div class="brief-badge danger-badge">Simulation Only</div>
+      <h3>Credential Harvesting Simulation</h3>
+      <p>This page represents a fake login page often used in phishing attacks. This simulator does not store any input.</p>
+
+      <div class="login-sim-card">
+        <label>Email</label>
+        <input id="simEmail" type="email" placeholder="you@example.com">
+        <label>Password</label>
+        <input id="simPassword" type="password" placeholder="Enter password">
+      </div>
+
+      <div class="modal-actions">
+        <button class="secondary-btn" onclick="closeLoginSim()">Go Back</button>
+        <button class="danger-btn" onclick="submitLoginSim()">Sign In</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= FEEDBACK MODAL ================= -->
+  <div id="feedbackModal" class="modal">
+    <div class="modal-box">
+      <div id="feedbackBadge" class="feedback-badge">Feedback</div>
+      <h3 id="feedbackTitle"></h3>
+      <p id="feedbackText"></p>
+
+      <div class="feedback-meta">
+        <div>
+          <span class="meta-label">Impact</span>
+          <strong id="feedbackImpact"></strong>
+        </div>
+        <div>
+          <span class="meta-label">Clues Found</span>
+          <strong id="feedbackClues"></strong>
+        </div>
+      </div>
+
+      <button class="primary-btn" onclick="nextEmail()">Continue</button>
+    </div>
+  </div>
+
+  <!-- ================= BREACH SCREEN ================= -->
+  <div id="breachScreen" class="screen">
+    <div class="center-box">
+      <div class="brief-badge danger-badge">Security Incident</div>
+      <h2>⚠️ You interacted with a phishing email</h2>
+      <p>This simulation shows how a single unsafe action can lead to business impact.</p>
+
+      <div class="breach-box">
+        <p>Possible consequences:</p>
+        <ul>
+          <li>Credentials exposed to attackers</li>
+          <li>Account compromise and unauthorized access</li>
+          <li>Internal lateral movement or data theft</li>
+          <li>Additional phishing sent from your account</li>
+        </ul>
+      </div>
+
+      <button class="primary-btn" onclick="showFinalDashboard()">Continue to Results</button>
+    </div>
+  </div>
+
+  <!-- ================= DASHBOARD SCREEN ================= -->
+  <div id="dashboardScreen" class="screen">
+    <div class="center-box results-box">
+      <div class="brief-badge">Training Complete</div>
+      <h2>Your Results</h2>
+
+      <div class="results-hero">
+        <div class="result-main-card">
+          <span class="result-label">Final Score</span>
+          <h3 id="finalScore">0</h3>
+        </div>
+        <div class="result-main-card">
+          <span class="result-label">Accuracy</span>
+          <h3 id="accuracy">0%</h3>
+        </div>
+        <div class="result-main-card">
+          <span class="result-label">Risk Level</span>
+          <h3 id="risk">-</h3>
+        </div>
+      </div>
+
+      <div class="results-grid">
+        <div class="result-card">
+          <span class="result-label">Correct Classifications</span>
+          <strong id="correctClassifications">0</strong>
+        </div>
+        <div class="result-card">
+          <span class="result-label">Safe Reports</span>
+          <strong id="safeReports">0</strong>
+        </div>
+        <div class="result-card">
+          <span class="result-label">Risky Actions</span>
+          <strong id="riskyActions">0</strong>
+        </div>
+        <div class="result-card">
+          <span class="result-label">False Positives</span>
+          <strong id="falsePositives">0</strong>
+        </div>
+        <div class="result-card">
+          <span class="result-label">Clues Found</span>
+          <strong id="cluesFound">0</strong>
+        </div>
+        <div class="result-card">
+          <span class="result-label">Emails Reviewed</span>
+          <strong id="emailsReviewed">0</strong>
+        </div>
+      </div>
+
+      <div class="results-grid secondary-results">
+        <div class="result-card">
+          <span class="result-label">Behavior Profile</span>
+          <strong id="behaviorProfile">-</strong>
+        </div>
+        <div class="result-card">
+          <span class="result-label">Unsafe Escalations</span>
+          <strong id="unsafeEscalations">0</strong>
+        </div>
+        <div class="result-card">
+          <span class="result-label">Breach Triggered</span>
+          <strong id="breachTriggered">No</strong>
+        </div>
+      </div>
+
+      <p id="coachSummary" class="coach-summary"></p>
+
+      <button class="primary-btn" onclick="location.reload()">Restart Training</button>
+    </div>
+  </div>
+
+  <script src="js/script.js"></script>
+</body>
+</html>
