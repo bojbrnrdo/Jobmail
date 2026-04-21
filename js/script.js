@@ -1,29 +1,86 @@
 // =======================================================
-// BOUNTYPLAY - FINAL BOSS TRAINING VERSION
+// BOUNTYPLAY - FULL ADVANCED TRAINING ENGINE
+// VM SCALE + PHISHING TRAINING + FEEDBACK + DASHBOARD
+// FULL UPDATED VERSION
 // =======================================================
 
-// ================= SCREEN CONTROL =================
-function showScreen(id) {
-  document.querySelectorAll(".screen").forEach(screen => {
-    screen.classList.remove("active");
-    screen.style.display = "none";
-  });
+// =======================================================
+// SECTION 1: APP CONFIG
+// =======================================================
 
-  const target = document.getElementById(id);
-  if (target) {
-    target.classList.add("active");
-    target.style.display = "flex";
-  }
-}
+const APP_CONFIG = {
+  baseWidth: 1200,
+  baseHeight: 700,
+  maxMistakes: 4,
+  scorePerClue: 10,
+  scoreCorrectClassification: 20,
+  scoreCorrectReport: 15,
+  scoreQuickReport: 25,
+  scoreSafeKeep: 10,
+  scoreDeletePhishing: 5,
+  penaltyWrongClassification: 1,
+  penaltyRiskyKeep: 1,
+  penaltyRiskyReply: 1,
+  penaltyFalsePositive: 1,
+  loginSimPenaltyScore: 15,
+  tutorialDelayMs: 350,
+  riskyLinkDelayMs: 250,
+  wrongFlashDelayMs: 350,
+  defaultFeedbackBadge: "feedback-badge",
+  debug: true
+};
 
-// ================= TRAINING DATA =================
+// =======================================================
+// SECTION 2: GLOBAL STATE
+// =======================================================
+
+let currentEmailIndex = 0;
+let score = 0;
+let mistakes = 0;
+let tutorialShown = false;
+let breachTriggered = false;
+
+let selectedClassification = null;
+let selectedAction = null;
+let cluesFoundForCurrentEmail = 0;
+let riskyLinkOpenedForCurrentEmail = false;
+
+let appInitialized = false;
+let emailClicksBound = false;
+let activeScreenId = "briefingScreen";
+
+const emailResults = [];
+const openedEmailIndexes = new Set();
+
+const stats = {
+  totalEmails: 0,
+  correctClassifications: 0,
+  safeReports: 0,
+  riskyActions: 0,
+  falsePositives: 0,
+  cluesFound: 0,
+  emailsReviewed: 0,
+  unsafeEscalations: 0,
+  quickReports: 0,
+  deleteActions: 0,
+  keepActions: 0,
+  replyActions: 0,
+  riskyLinkInteractions: 0,
+  loginSimSubmitted: 0
+};
+
+// =======================================================
+// SECTION 3: EMAIL DATA
+// =======================================================
+
 const emails = [
   {
+    id: "google-alert",
     type: "phishing",
-    subject: "Security Alert: Suspicious Sign-in Attempt",
     senderDisplay: "Google",
-    sender: `Google Security <span class="clickable clue">security@google-support-alert.co</span>`,
+    subject: "Security Alert: Suspicious Sign-in Attempt",
     time: "Now",
+    sender: `Google Security <span class="clickable clue">security@google-support-alert.co</span>`,
     body: `
       <p>Dear User,</p>
       <p>We detected a suspicious sign-in attempt on your Google Account from a new device.</p>
@@ -39,14 +96,18 @@ const emails = [
     safeClassification: "phishing",
     safeAction: "report",
     explanation:
-      "This message used a fake sender domain, a suspicious verification link, and a spelling error. These are common phishing indicators."
+      "The sender domain is not an official Google domain, the verification link is suspicious, and there is a spelling error. These are classic phishing indicators.",
+    riskSummary:
+      "This attack attempts credential theft through urgency and a fake verification page."
   },
+
   {
+    id: "security-bank",
     type: "phishing",
-    subject: "Account Verification Required",
     senderDisplay: "Security Bank",
-    sender: `Security Bank <span class="clickable clue">no-reply@securitybank-verify.com</span>`,
+    subject: "Account Verification Required",
     time: "Now",
+    sender: `Security Bank <span class="clickable clue">no-reply@securitybank-verify.com</span>`,
     body: `
       <p>Dear Customer,</p>
       <p>Your account requires urgent verification.</p>
@@ -69,14 +130,18 @@ const emails = [
     safeClassification: "phishing",
     safeAction: "report",
     explanation:
-      "The sender domain is not the official bank domain, and the attachment is used as a lure to collect sensitive information."
+      "The sender domain is suspicious and the attachment is used as a lure to collect sensitive information.",
+    riskSummary:
+      "This attack tries to make the target open a deceptive document to trigger account compromise."
   },
+
   {
+    id: "ceo-fraud",
     type: "phishing",
-    subject: "Urgent request before my meeting",
     senderDisplay: "CEO Office",
-    sender: `CEO Office <span class="clickable clue">ceo-office.external@consultantmail.com</span>`,
+    subject: "Urgent request before my meeting",
     time: "8:54 AM",
+    sender: `CEO Office <span class="clickable clue">ceo-office.external@consultantmail.com</span>`,
     body: `
       <p>Hello,</p>
       <p>I need you to handle an urgent payment request before my next meeting.</p>
@@ -89,14 +154,18 @@ const emails = [
     safeClassification: "phishing",
     safeAction: "report",
     explanation:
-      "This email creates urgency, requests secrecy, and uses an unusual sender address. These are classic CEO fraud indicators."
+      "This email creates urgency, asks for secrecy, and uses an unusual sender address. These are common executive impersonation signs.",
+    riskSummary:
+      "This attack tries to manipulate the user into bypassing normal payment controls."
   },
+
   {
+    id: "delivery-scam",
     type: "phishing",
-    subject: "Your parcel is on hold",
     senderDisplay: "FlashExpress",
-    sender: `FlashExpress <span class="clickable clue">support@flashxpress-track.co</span>`,
+    subject: "Your parcel is on hold",
     time: "8:22 AM",
+    sender: `FlashExpress <span class="clickable clue">support@flashxpress-track.co</span>`,
     body: `
       <p>Dear Customer,</p>
       <p>Your parcel is currently on hold due to an address mismatch.</p>
@@ -110,14 +179,18 @@ const emails = [
     safeClassification: "phishing",
     safeAction: "report",
     explanation:
-      "The domain is suspicious and the email pressures the user to act quickly through a link."
+      "The sender domain is misspelled and the email pressures the user to click a link quickly.",
+    riskSummary:
+      "This attack tries to harvest payment or delivery information through a fake logistics page."
   },
+
   {
+    id: "maya-receipt",
     type: "safe",
-    subject: "Your transaction receipt",
     senderDisplay: "Maya",
-    sender: `Maya <span>no-reply@maya.ph</span>`,
+    subject: "Your transaction receipt",
     time: "7:41 AM",
+    sender: `Maya <span>no-reply@maya.ph</span>`,
     body: `
       <p>Hello,</p>
       <p>Your transaction was successfully processed.</p>
@@ -131,184 +204,494 @@ const emails = [
     safeClassification: "safe",
     safeAction: "keep",
     explanation:
-      "This email does not pressure the user, does not request credentials, and appears to come from a legitimate sender."
+      "This email does not pressure the user, does not request credentials, and appears to come from a legitimate sender.",
+    riskSummary:
+      "This is a normal transaction receipt with no clear phishing indicators."
   }
 ];
 
-// ================= STATE =================
-let currentEmailIndex = 0;
-let score = 0;
-let mistakes = 0;
-const maxMistakes = 4;
-let cluesFoundForCurrentEmail = 0;
-let tutorialShown = false;
-let selectedClassification = null;
-let selectedAction = null;
-let breachTriggered = false;
+stats.totalEmails = emails.length;
 
-const emailResults = new Array(emails.length).fill(null);
+for (let i = 0; i < emails.length; i++) {
+  emailResults.push(false);
+}
 
-const stats = {
-  totalEmails: emails.length,
-  correctClassifications: 0,
-  safeReports: 0,
-  riskyActions: 0,
-  falsePositives: 0,
-  cluesFound: 0,
-  emailsReviewed: 0,
-  unsafeEscalations: 0
-};
+// =======================================================
+// SECTION 4: DOM HELPERS
+// =======================================================
 
-// ================= STARTUP =================
-window.addEventListener("DOMContentLoaded", () => {
-  showScreen("briefingScreen");
+function byId(id) {
+  return document.getElementById(id);
+}
 
-  const idsToHide = [
-    "tutorialOverlay",
-    "tutorialModal",
-    "feedbackModal",
-    "decisionModal",
-    "loginSimModal"
-  ];
+function qs(selector) {
+  return document.querySelector(selector);
+}
 
-  idsToHide.forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.style.display = "none";
-  });
+function qsa(selector) {
+  return document.querySelectorAll(selector);
+}
 
-  updateHUD();
-});
+// =======================================================
+// SECTION 5: DEBUG HELPERS
+// =======================================================
 
-// ================= TRAINING START =================
-function startTraining() {
-  showScreen("gameScreen");
-  resetTrainingUI();
-  updateHUD();
-
-  if (!tutorialShown) {
-    setTimeout(showTutorial, 300);
-    tutorialShown = true;
+function debugLog(...args) {
+  if (APP_CONFIG.debug) {
+    console.log(...args);
   }
 }
 
-// ================= RESET =================
-function resetTrainingUI() {
-  currentEmailIndex = 0;
-  cluesFoundForCurrentEmail = 0;
+function debugWarn(...args) {
+  if (APP_CONFIG.debug) {
+    console.warn(...args);
+  }
+}
+
+function debugError(...args) {
+  if (APP_CONFIG.debug) {
+    console.error(...args);
+  }
+}
+
+// =======================================================
+// SECTION 6: VM SCALING
+// =======================================================
+
+function scaleApp() {
+  const screens = qsa(".screen");
+  if (!screens.length) return;
+
+  const baseWidth = APP_CONFIG.baseWidth;
+  const baseHeight = APP_CONFIG.baseHeight;
+
+  const scale = Math.min(
+    window.innerWidth / baseWidth,
+    window.innerHeight / baseHeight
+  );
+
+  const offsetX = (window.innerWidth - baseWidth * scale) / 2;
+  const offsetY = (window.innerHeight - baseHeight * scale) / 2;
+
+  screens.forEach((screen) => {
+    screen.style.transform = `scale(${scale})`;
+    screen.style.left = `${offsetX}px`;
+    screen.style.top = `${offsetY}px`;
+  });
+
+  debugLog("scaleApp:", { scale, offsetX, offsetY });
+}
+
+// =======================================================
+// SECTION 7: SCREEN CONTROL
+// =======================================================
+
+function hideAllScreens() {
+  qsa(".screen").forEach((screen) => {
+    screen.classList.remove("active");
+    screen.style.display = "none";
+  });
+}
+
+function showScreen(id) {
+  hideAllScreens();
+
+  const target = byId(id);
+  if (!target) {
+    debugWarn("showScreen: target not found:", id);
+    return;
+  }
+
+  target.classList.add("active");
+  target.style.display = "flex";
+  activeScreenId = id;
+
+  scaleApp();
+  debugLog("showScreen:", id);
+}
+
+function getActiveScreenId() {
+  return activeScreenId;
+}
+
+function isScreenVisible(id) {
+  const el = byId(id);
+  if (!el) return false;
+  return el.style.display === "flex" || el.classList.contains("active");
+}
+
+// =======================================================
+// SECTION 8: MODAL CONTROL
+// =======================================================
+
+function openModal(id) {
+  const modal = byId(id);
+  if (modal) {
+    modal.style.display = "flex";
+    debugLog("openModal:", id);
+  } else {
+    debugWarn("openModal: modal not found:", id);
+  }
+}
+
+function closeModal(id) {
+  const modal = byId(id);
+  if (modal) {
+    modal.style.display = "none";
+    debugLog("closeModal:", id);
+  }
+}
+
+function closeAllModals() {
+  const modalIds = [
+    "decisionModal",
+    "loginSimModal",
+    "feedbackModal"
+  ];
+
+  modalIds.forEach(closeModal);
+}
+
+function isAnyModalOpen() {
+  const modalIds = ["decisionModal", "loginSimModal", "feedbackModal"];
+  return modalIds.some((id) => {
+    const el = byId(id);
+    return el && el.style.display === "flex";
+  });
+}
+
+// =======================================================
+// SECTION 9: EVENT / CLICK FIXES
+// =======================================================
+
+function disableOverlayClickBlock() {
+  const tutorialOverlay = byId("tutorialOverlay");
+  if (tutorialOverlay) {
+    tutorialOverlay.style.pointerEvents = "none";
+    debugLog("Overlay pointer-events disabled");
+  }
+}
+
+function bindEmailClicks() {
+  const items = qsa(".clickable-mail");
+
+  if (!items.length) {
+    debugWarn("bindEmailClicks: no clickable-mail items found");
+    return;
+  }
+
+  items.forEach((item, index) => {
+    item.onclick = function (event) {
+      if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+      debugLog("📩 CLICK DETECTED:", index);
+      openEmail(index);
+    };
+  });
+
+  emailClicksBound = true;
+  debugLog("bindEmailClicks: bound", items.length, "items");
+}
+
+function rebindDynamicHandlersIfNeeded() {
+  if (!emailClicksBound) {
+    bindEmailClicks();
+  }
+}
+
+// =======================================================
+// SECTION 10: INITIALIZATION
+// =======================================================
+
+function initializeApp() {
+  const tutorialOverlay = byId("tutorialOverlay");
+  const tutorialModal = byId("tutorialModal");
+
+  if (tutorialOverlay) tutorialOverlay.style.display = "none";
+  if (tutorialModal) tutorialModal.style.display = "none";
+
+  disableOverlayClickBlock();
+  closeAllModals();
+  showScreen("briefingScreen");
+  updateHUD();
+  scaleApp();
+  bindEmailClicks();
+
+  appInitialized = true;
+  debugLog("initializeApp complete");
+}
+
+// =======================================================
+// SECTION 11: TRAINING START / RESET
+// =======================================================
+
+function resetDecisionState() {
   selectedClassification = null;
   selectedAction = null;
 
-  document.getElementById("emailList").style.display = "block";
-  document.getElementById("emailView").style.display = "none";
+  const buttonIds = [
+    "classifyPhishingBtn",
+    "classifySafeBtn",
+    "actionReportBtn",
+    "actionDeleteBtn",
+    "actionKeepBtn",
+    "actionReplyBtn"
+  ];
 
-  document.querySelectorAll(".clickable-mail").forEach((item, index) => {
+  buttonIds.forEach((id) => {
+    const el = byId(id);
+    if (el) el.classList.remove("selected");
+  });
+}
+
+function resetCurrentEmailInteractionState() {
+  cluesFoundForCurrentEmail = 0;
+  riskyLinkOpenedForCurrentEmail = false;
+  resetDecisionState();
+}
+
+function resetVisualInboxState() {
+  qsa(".clickable-mail").forEach((item) => {
     item.classList.add("unread");
     item.classList.remove("read");
     item.style.opacity = "1";
     item.dataset.done = "false";
-
-    if (index === 0) {
-      item.id = "firstEmail";
-    }
   });
 }
 
-// ================= TUTORIAL =================
-function showTutorial() {
-  const overlay = document.getElementById("tutorialOverlay");
-  const modal = document.getElementById("tutorialModal");
-  const target = document.getElementById("firstEmail");
-  const gameScreen = document.getElementById("gameScreen");
+function resetStats() {
+  stats.correctClassifications = 0;
+  stats.safeReports = 0;
+  stats.riskyActions = 0;
+  stats.falsePositives = 0;
+  stats.cluesFound = 0;
+  stats.emailsReviewed = 0;
+  stats.unsafeEscalations = 0;
+  stats.quickReports = 0;
+  stats.deleteActions = 0;
+  stats.keepActions = 0;
+  stats.replyActions = 0;
+  stats.riskyLinkInteractions = 0;
+  stats.loginSimSubmitted = 0;
+}
 
-  if (!overlay || !modal || !target || !gameScreen) return;
+function resetEmailResults() {
+  for (let i = 0; i < emailResults.length; i++) {
+    emailResults[i] = false;
+  }
+}
+
+function startTraining() {
+  score = 0;
+  mistakes = 0;
+  currentEmailIndex = 0;
+  breachTriggered = false;
+  tutorialShown = false;
+  openedEmailIndexes.clear();
+
+  resetStats();
+  resetEmailResults();
+  resetCurrentEmailInteractionState();
+  resetVisualInboxState();
+
+  if (byId("emailList")) byId("emailList").style.display = "block";
+  if (byId("emailView")) byId("emailView").style.display = "none";
+
+  closeAllModals();
+  showScreen("gameScreen");
+  rebindDynamicHandlersIfNeeded();
+  updateHUD();
+
+  if (!tutorialShown) {
+    setTimeout(() => {
+      showTutorial();
+      tutorialShown = true;
+    }, APP_CONFIG.tutorialDelayMs);
+  }
+
+  debugLog("startTraining complete");
+}
+
+// =======================================================
+// SECTION 12: TUTORIAL
+// =======================================================
+
+function showTutorial() {
+  const overlay = byId("tutorialOverlay");
+  const modal = byId("tutorialModal");
+  const target = byId("firstEmail");
+  const gameScreen = byId("gameScreen");
+
+  if (!overlay || !modal || !target || !gameScreen) {
+    debugWarn("showTutorial: missing tutorial elements");
+    return;
+  }
 
   overlay.style.display = "block";
   modal.style.display = "block";
 
-  const rect = target.getBoundingClientRect();
-  const parent = gameScreen.getBoundingClientRect();
+  const targetRect = target.getBoundingClientRect();
+  const gameRect = gameScreen.getBoundingClientRect();
 
-  modal.style.top = `${rect.top - parent.top + 8}px`;
-  modal.style.left = `${rect.right - parent.left + 12}px`;
+  modal.style.top = `${targetRect.top - gameRect.top + 8}px`;
+  modal.style.left = `${targetRect.right - gameRect.left + 12}px`;
+
+  debugLog("showTutorial");
 }
 
 function hideTutorial() {
-  const overlay = document.getElementById("tutorialOverlay");
-  const modal = document.getElementById("tutorialModal");
+  const overlay = byId("tutorialOverlay");
+  const modal = byId("tutorialModal");
 
   if (overlay) overlay.style.display = "none";
   if (modal) modal.style.display = "none";
+
+  debugLog("hideTutorial");
 }
 
-// ================= OPEN EMAIL =================
+// =======================================================
+// SECTION 13: EMAIL FLOW
+// =======================================================
+
+function canOpenEmail(index) {
+  if (mistakes >= APP_CONFIG.maxMistakes) return false;
+  if (index < 0 || index >= emails.length) return false;
+  if (emailResults[index]) return false;
+  return true;
+}
+
+function renderEmail(email) {
+  if (!email) return;
+
+  if (byId("emailSubject")) {
+    byId("emailSubject").innerText = email.subject;
+  }
+
+  if (byId("emailSender")) {
+    byId("emailSender").innerHTML = email.sender;
+  }
+
+  if (byId("emailBody")) {
+    byId("emailBody").innerHTML = email.body;
+  }
+
+  if (byId("emailTimestamp")) {
+    byId("emailTimestamp").innerText = email.time;
+  }
+}
+
+function markEmailAsOpened(index) {
+  const items = qsa(".clickable-mail");
+  const item = items[index];
+
+  if (!item) return;
+
+  item.classList.remove("unread");
+  item.classList.add("read");
+  openedEmailIndexes.add(index);
+}
+
 function openEmail(index) {
-  if (mistakes >= maxMistakes) return;
-  if (index < 0 || index >= emails.length) return;
-  if (emailResults[index]) return;
+  debugLog("OPEN EMAIL CALLED:", index);
+
+  if (!canOpenEmail(index)) {
+    debugWarn("openEmail blocked:", index);
+    return;
+  }
 
   currentEmailIndex = index;
-  cluesFoundForCurrentEmail = 0;
-  selectedClassification = null;
-  selectedAction = null;
+  resetCurrentEmailInteractionState();
 
   if (index === 0) {
     hideTutorial();
   }
 
-  clearDecisionSelection();
-
   const email = emails[index];
+  renderEmail(email);
+  markEmailAsOpened(index);
 
-  document.getElementById("emailList").style.display = "none";
-  document.getElementById("emailView").style.display = "block";
-
-  document.getElementById("emailSubject").innerText = email.subject;
-  document.getElementById("emailSender").innerHTML = email.sender;
-  document.getElementById("emailBody").innerHTML = email.body;
-  document.getElementById("emailTimestamp").innerText = email.time;
-
-  const item = document.querySelectorAll(".clickable-mail")[index];
-  if (item) {
-    item.classList.remove("unread");
-    item.classList.add("read");
-  }
+  if (byId("emailList")) byId("emailList").style.display = "none";
+  if (byId("emailView")) byId("emailView").style.display = "block";
 
   activateClueClicks();
   updateHUD();
 }
 
-// ================= BACK =================
 function goBack() {
-  document.getElementById("emailList").style.display = "block";
-  document.getElementById("emailView").style.display = "none";
+  if (byId("emailList")) byId("emailList").style.display = "block";
+  if (byId("emailView")) byId("emailView").style.display = "none";
+  debugLog("goBack");
 }
 
-// ================= CLUE CLICK SYSTEM =================
-function activateClueClicks() {
-  const emailBody = document.getElementById("emailBody");
-  const emailSender = document.getElementById("emailSender");
+function getCurrentEmail() {
+  return emails[currentEmailIndex] || null;
+}
 
-  if (!emailBody || !emailSender) return;
+// =======================================================
+// SECTION 14: CLUE CLICK ENGINE
+// =======================================================
+
+function incrementScore(amount) {
+  score += amount;
+  if (score < 0) score = 0;
+}
+
+function incrementMistake(count = 1) {
+  mistakes += count;
+  if (mistakes < 0) mistakes = 0;
+}
+
+function markClue(target) {
+  if (!target || target.classList.contains("clicked")) return false;
+
+  target.classList.add("clicked");
+  cluesFoundForCurrentEmail += 1;
+  stats.cluesFound += 1;
+  incrementScore(APP_CONFIG.scorePerClue);
+  updateHUD();
+  return true;
+}
+
+function markWrongTarget(target) {
+  if (!target) return;
+
+  target.classList.add("wrong");
+  incrementMistake(1);
+  updateHUD();
+
+  setTimeout(() => {
+    target.classList.remove("wrong");
+  }, APP_CONFIG.wrongFlashDelayMs);
+
+  if (mistakes >= APP_CONFIG.maxMistakes) {
+    breachTriggered = true;
+    showScreen("breachScreen");
+  }
+}
+
+function activateClueClicks() {
+  const emailBody = byId("emailBody");
+  const emailSender = byId("emailSender");
+
+  if (!emailBody || !emailSender) {
+    debugWarn("activateClueClicks: missing email body or sender");
+    return;
+  }
 
   emailBody.onclick = null;
   emailSender.onclick = null;
 
-  function markClue(target) {
-    if (target.classList.contains("clicked")) return false;
-
-    target.classList.add("clicked");
-    cluesFoundForCurrentEmail++;
-    stats.cluesFound++;
-    score += 10;
-    updateHUD();
-    return true;
-  }
+  debugLog("Clue system active");
 
   function handleClick(event) {
-    if (mistakes >= maxMistakes) return;
+    if (mistakes >= APP_CONFIG.maxMistakes) return;
 
     const target = event.target;
     const attachment = target.closest(".attachment-clue");
+
+    debugLog("Clicked:", target);
 
     if (attachment) {
       markClue(attachment);
@@ -316,10 +699,17 @@ function activateClueClicks() {
     }
 
     if (target.classList.contains("risky-link")) {
-      markClue(target);
-      setTimeout(() => {
-        openLoginSim();
-      }, 250);
+      const marked = markClue(target);
+
+      if (marked && !riskyLinkOpenedForCurrentEmail) {
+        riskyLinkOpenedForCurrentEmail = true;
+        stats.riskyLinkInteractions += 1;
+
+        setTimeout(() => {
+          openLoginSim();
+        }, APP_CONFIG.riskyLinkDelayMs);
+      }
+
       return;
     }
 
@@ -328,48 +718,53 @@ function activateClueClicks() {
       return;
     }
 
-    target.classList.add("wrong");
-    mistakes++;
-
-    setTimeout(() => {
-      target.classList.remove("wrong");
-    }, 350);
-
-    updateHUD();
-
-    if (mistakes >= maxMistakes) {
-      breachTriggered = true;
-      showScreen("breachScreen");
-    }
+    markWrongTarget(target);
   }
 
   emailBody.onclick = handleClick;
   emailSender.onclick = handleClick;
 }
 
-// ================= QUICK REPORT =================
+// =======================================================
+// SECTION 15: QUICK REPORT
+// =======================================================
+
+function markEmailDone(index) {
+  const items = qsa(".clickable-mail");
+  const item = items[index];
+
+  if (!item) return;
+  if (item.dataset.done === "true") return;
+
+  item.dataset.done = "true";
+  item.style.opacity = "0.5";
+  item.classList.remove("unread");
+  item.classList.add("read");
+}
+
 function quickReport() {
   const email = emails[currentEmailIndex];
-
+  if (!email) return;
   if (emailResults[currentEmailIndex]) return;
 
-  stats.emailsReviewed++;
+  stats.emailsReviewed += 1;
+  stats.quickReports += 1;
 
   if (email.type === "phishing") {
-    score += 25;
-    stats.safeReports++;
-    stats.correctClassifications++;
+    incrementScore(APP_CONFIG.scoreQuickReport);
+    stats.safeReports += 1;
+    stats.correctClassifications += 1;
 
     showFeedback(
       "Correct — Reported Immediately",
-      "You identified and reported the phishing email without engaging further. Immediate reporting is a strong defensive action.",
+      "You identified and reported the phishing email without interacting further. Immediate reporting is a strong defensive action.",
       "Threat escalated safely",
       ""
     );
   } else {
-    mistakes++;
-    stats.falsePositives++;
-    stats.unsafeEscalations++;
+    incrementMistake(APP_CONFIG.penaltyFalsePositive);
+    stats.falsePositives += 1;
+    stats.unsafeEscalations += 1;
 
     showFeedback(
       "False Positive",
@@ -383,83 +778,102 @@ function quickReport() {
   emailResults[currentEmailIndex] = true;
   updateHUD();
 
-  if (mistakes >= maxMistakes) {
+  if (mistakes >= APP_CONFIG.maxMistakes) {
     breachTriggered = true;
     showScreen("breachScreen");
   }
 }
 
-// ================= DECISION MODAL =================
-function openDecisionModal() {
-  if (mistakes >= maxMistakes) return;
+// =======================================================
+// SECTION 16: DECISION MODAL
+// =======================================================
 
-  const modal = document.getElementById("decisionModal");
-  if (modal) modal.style.display = "flex";
+function openDecisionModal() {
+  if (mistakes >= APP_CONFIG.maxMistakes) return;
+  openModal("decisionModal");
 }
 
 function closeDecisionModal() {
-  const modal = document.getElementById("decisionModal");
-  if (modal) modal.style.display = "none";
-}
-
-function clearDecisionSelection() {
-  selectedClassification = null;
-  selectedAction = null;
-
-  document.querySelectorAll(".choice-btn").forEach(btn => {
-    btn.classList.remove("selected");
-  });
+  closeModal("decisionModal");
 }
 
 function setClassification(value) {
   selectedClassification = value;
 
-  document.getElementById("classifyPhishingBtn").classList.remove("selected");
-  document.getElementById("classifySafeBtn").classList.remove("selected");
+  const phishingBtn = byId("classifyPhishingBtn");
+  const safeBtn = byId("classifySafeBtn");
 
-  if (value === "phishing") {
-    document.getElementById("classifyPhishingBtn").classList.add("selected");
-  } else {
-    document.getElementById("classifySafeBtn").classList.add("selected");
-  }
+  if (phishingBtn) phishingBtn.classList.remove("selected");
+  if (safeBtn) safeBtn.classList.remove("selected");
+
+  if (value === "phishing" && phishingBtn) phishingBtn.classList.add("selected");
+  if (value === "safe" && safeBtn) safeBtn.classList.add("selected");
 }
 
 function setAction(value) {
   selectedAction = value;
 
-  document.getElementById("actionReportBtn").classList.remove("selected");
-  document.getElementById("actionDeleteBtn").classList.remove("selected");
-  document.getElementById("actionKeepBtn").classList.remove("selected");
-  document.getElementById("actionReplyBtn").classList.remove("selected");
+  const ids = [
+    "actionReportBtn",
+    "actionDeleteBtn",
+    "actionKeepBtn",
+    "actionReplyBtn"
+  ];
 
-  if (value === "report") document.getElementById("actionReportBtn").classList.add("selected");
-  if (value === "delete") document.getElementById("actionDeleteBtn").classList.add("selected");
-  if (value === "keep") document.getElementById("actionKeepBtn").classList.add("selected");
-  if (value === "reply") document.getElementById("actionReplyBtn").classList.add("selected");
+  ids.forEach((id) => {
+    const el = byId(id);
+    if (el) el.classList.remove("selected");
+  });
+
+  if (value === "report" && byId("actionReportBtn")) {
+    byId("actionReportBtn").classList.add("selected");
+  }
+
+  if (value === "delete" && byId("actionDeleteBtn")) {
+    byId("actionDeleteBtn").classList.add("selected");
+  }
+
+  if (value === "keep" && byId("actionKeepBtn")) {
+    byId("actionKeepBtn").classList.add("selected");
+  }
+
+  if (value === "reply" && byId("actionReplyBtn")) {
+    byId("actionReplyBtn").classList.add("selected");
+  }
 }
 
-// ================= LOGIN SIMULATION =================
+// =======================================================
+// SECTION 17: LOGIN SIMULATION
+// =======================================================
+
 function openLoginSim() {
-  const modal = document.getElementById("loginSimModal");
-  if (modal) modal.style.display = "flex";
+  openModal("loginSimModal");
 }
 
 function closeLoginSim() {
-  const modal = document.getElementById("loginSimModal");
-  if (modal) modal.style.display = "none";
+  closeModal("loginSimModal");
+}
+
+function clearLoginSimInputs() {
+  const simEmail = byId("simEmail");
+  const simPassword = byId("simPassword");
+
+  if (simEmail) simEmail.value = "";
+  if (simPassword) simPassword.value = "";
 }
 
 function submitLoginSim() {
   closeLoginSim();
-
-  score = Math.max(score - 15, 0);
-  mistakes++;
-  stats.riskyActions++;
+  stats.loginSimSubmitted += 1;
+  stats.riskyActions += 1;
   breachTriggered = true;
+
+  incrementScore(-APP_CONFIG.loginSimPenaltyScore);
+  incrementMistake(1);
 
   showFeedback(
     "Credentials Exposed in Simulation",
-    "Submitting credentials into a fake login page is one of the most damaging phishing outcomes. In a real attack, this could lead to account compromise.",
+    "Submitting credentials into a fake login page is one of the most damaging phishing outcomes. In a real incident, this could lead to account compromise.",
     "Credential harvesting simulated",
     "danger"
   );
@@ -467,9 +881,16 @@ function submitLoginSim() {
   markEmailDone(currentEmailIndex);
   emailResults[currentEmailIndex] = true;
   updateHUD();
+
+  if (mistakes >= APP_CONFIG.maxMistakes) {
+    showScreen("breachScreen");
+  }
 }
 
-// ================= SUBMIT DECISION =================
+// =======================================================
+// SECTION 18: DECISION SUBMISSION
+// =======================================================
+
 function submitDecision() {
   if (!selectedClassification || !selectedAction) {
     alert("Please choose both a classification and an action.");
@@ -479,42 +900,47 @@ function submitDecision() {
   closeDecisionModal();
 
   const email = emails[currentEmailIndex];
+  if (!email) return;
+  if (emailResults[currentEmailIndex]) return;
+
   let title = "";
   let text = "";
   let impact = "";
   let badgeClass = "";
   let classificationCorrect = false;
 
-  if (emailResults[currentEmailIndex]) return;
-
-  stats.emailsReviewed++;
+  stats.emailsReviewed += 1;
 
   if (selectedClassification === email.safeClassification) {
     classificationCorrect = true;
-    score += 20;
-    stats.correctClassifications++;
+    incrementScore(APP_CONFIG.scoreCorrectClassification);
+    stats.correctClassifications += 1;
   } else {
-    mistakes++;
+    incrementMistake(APP_CONFIG.penaltyWrongClassification);
   }
+
+  if (selectedAction === "delete") stats.deleteActions += 1;
+  if (selectedAction === "keep") stats.keepActions += 1;
+  if (selectedAction === "reply") stats.replyActions += 1;
 
   if (email.type === "phishing") {
     if (selectedAction === "report") {
-      score += 15;
-      stats.safeReports++;
+      incrementScore(APP_CONFIG.scoreCorrectReport);
+      stats.safeReports += 1;
       impact = "Threat safely escalated";
     } else if (selectedAction === "delete") {
-      score += 5;
+      incrementScore(APP_CONFIG.scoreDeletePhishing);
       impact = "Threat removed, but not reported";
       badgeClass = "warn";
     } else if (selectedAction === "keep") {
-      mistakes++;
-      stats.riskyActions++;
+      incrementMistake(APP_CONFIG.penaltyRiskyKeep);
+      stats.riskyActions += 1;
       impact = "Threat remains in inbox";
       badgeClass = "danger";
       breachTriggered = true;
     } else if (selectedAction === "reply") {
-      mistakes++;
-      stats.riskyActions++;
+      incrementMistake(APP_CONFIG.penaltyRiskyReply);
+      stats.riskyActions += 1;
       impact = "Attacker engagement increased";
       badgeClass = "danger";
       breachTriggered = true;
@@ -522,7 +948,7 @@ function submitDecision() {
 
     if (classificationCorrect && selectedAction === "report") {
       title = "Correct — You handled this phishing email well.";
-      text = email.explanation;
+      text = `${email.explanation} ${email.riskSummary}`;
     } else if (classificationCorrect) {
       title = "Partially correct.";
       text = `You identified the email correctly, but your response was not the safest option. ${email.explanation}`;
@@ -534,20 +960,20 @@ function submitDecision() {
     }
   } else {
     if (selectedAction === "keep") {
-      score += 10;
+      incrementScore(APP_CONFIG.scoreSafeKeep);
       impact = "Normal email flow preserved";
       title = classificationCorrect
         ? "Correct — This email appears legitimate."
         : "Mixed decision.";
       text = email.explanation;
     } else if (selectedAction === "report") {
-      mistakes++;
-      stats.falsePositives++;
-      stats.unsafeEscalations++;
+      incrementMistake(APP_CONFIG.penaltyFalsePositive);
+      stats.falsePositives += 1;
+      stats.unsafeEscalations += 1;
       impact = "False positive created";
       badgeClass = "warn";
       title = "False positive.";
-      text = `This email appears legitimate. Reporting safe emails can create noise for the security team. ${email.explanation}`;
+      text = `This email appears legitimate. Reporting safe emails can create unnecessary workload for the security team. ${email.explanation}`;
     } else if (selectedAction === "delete") {
       impact = "Legitimate email removed";
       badgeClass = "warn";
@@ -560,52 +986,55 @@ function submitDecision() {
     }
   }
 
-  if (!impact) impact = "Decision recorded";
+  if (!impact) {
+    impact = "Decision recorded";
+  }
 
   showFeedback(title, text, impact, badgeClass);
   markEmailDone(currentEmailIndex);
   emailResults[currentEmailIndex] = true;
   updateHUD();
 
-  if (mistakes >= maxMistakes) {
+  if (mistakes >= APP_CONFIG.maxMistakes) {
     breachTriggered = true;
   }
 }
 
-// ================= FEEDBACK =================
+// =======================================================
+// SECTION 19: FEEDBACK
+// =======================================================
+
 function showFeedback(title, text, impact, badgeClass = "") {
-  const feedbackModal = document.getElementById("feedbackModal");
-  const feedbackTitle = document.getElementById("feedbackTitle");
-  const feedbackText = document.getElementById("feedbackText");
-  const feedbackImpact = document.getElementById("feedbackImpact");
-  const feedbackClues = document.getElementById("feedbackClues");
-  const feedbackBadge = document.getElementById("feedbackBadge");
+  const feedbackTitle = byId("feedbackTitle");
+  const feedbackText = byId("feedbackText");
+  const feedbackImpact = byId("feedbackImpact");
+  const feedbackClues = byId("feedbackClues");
+  const feedbackBadge = byId("feedbackBadge");
 
-  feedbackTitle.innerText = title;
-  feedbackText.innerText = text;
-  feedbackImpact.innerText = impact;
-  feedbackClues.innerText = `${cluesFoundForCurrentEmail} clue(s)`;
-  feedbackBadge.className = "feedback-badge";
+  if (feedbackTitle) feedbackTitle.innerText = title;
+  if (feedbackText) feedbackText.innerText = text;
+  if (feedbackImpact) feedbackImpact.innerText = impact;
+  if (feedbackClues) feedbackClues.innerText = `${cluesFoundForCurrentEmail} clue(s)`;
 
-  if (badgeClass) {
-    feedbackBadge.classList.add(badgeClass);
+  if (feedbackBadge) {
+    feedbackBadge.className = APP_CONFIG.defaultFeedbackBadge;
+    if (badgeClass) feedbackBadge.classList.add(badgeClass);
   }
 
-  feedbackModal.style.display = "flex";
+  openModal("feedbackModal");
 }
 
 function nextEmail() {
-  const feedbackModal = document.getElementById("feedbackModal");
-  if (feedbackModal) {
-    feedbackModal.style.display = "none";
-  }
+  closeModal("feedbackModal");
 
-  if (breachTriggered && (mistakes >= maxMistakes || currentEmailIndex === emails.length - 1)) {
+  if (breachTriggered && (mistakes >= APP_CONFIG.maxMistakes || currentEmailIndex === emails.length - 1)) {
     showScreen("breachScreen");
     return;
   }
 
-  if (mistakes >= maxMistakes || emailResults.every(Boolean)) {
+  const allDone = emailResults.every(Boolean);
+
+  if (mistakes >= APP_CONFIG.maxMistakes || allDone) {
     if (breachTriggered) {
       showScreen("breachScreen");
     } else {
@@ -618,48 +1047,75 @@ function nextEmail() {
   updateHUD();
 }
 
-// ================= MARK EMAIL DONE =================
-function markEmailDone(index) {
-  const items = document.querySelectorAll(".clickable-mail");
-  const item = items[index];
+// =======================================================
+// SECTION 20: HUD + PROGRESS
+// =======================================================
 
-  if (!item || item.dataset.done === "true") return;
-
-  item.dataset.done = "true";
-  item.style.opacity = "0.5";
-  item.classList.remove("unread");
-  item.classList.add("read");
+function getReviewedCount() {
+  return emailResults.filter(Boolean).length;
 }
 
-// ================= HUD =================
 function updateHUD() {
-  const scoreEl = document.getElementById("score");
-  const progressEl = document.getElementById("progress");
-  const mistakesEl = document.getElementById("mistakes");
-  const progressFill = document.getElementById("progressFill");
-
-  const reviewedCount = emailResults.filter(Boolean).length;
+  const reviewedCount = getReviewedCount();
   const nextLabel = Math.min(reviewedCount + 1, emails.length);
   const percent = (reviewedCount / emails.length) * 100;
 
-  if (scoreEl) scoreEl.innerText = score;
-  if (progressEl) progressEl.innerText = `${nextLabel}/${emails.length}`;
-  if (mistakesEl) mistakesEl.innerText = `${mistakes}/${maxMistakes}`;
-  if (progressFill) progressFill.style.width = `${percent}%`;
+  if (byId("score")) {
+    byId("score").innerText = score;
+  }
+
+  if (byId("progress")) {
+    byId("progress").innerText = `${nextLabel}/${emails.length}`;
+  }
+
+  if (byId("mistakes")) {
+    byId("mistakes").innerText = `${mistakes}/${APP_CONFIG.maxMistakes}`;
+  }
+
+  if (byId("progressFill")) {
+    byId("progressFill").style.width = `${percent}%`;
+  }
 }
 
-// ================= FINAL DASHBOARD =================
+// =======================================================
+// SECTION 21: BEHAVIOR PROFILE
+// =======================================================
+
+function getBehaviorProfile() {
+  if (stats.riskyActions >= 3 || breachTriggered) {
+    return "High Risk User";
+  }
+
+  if (stats.safeReports >= 3 && stats.falsePositives === 0) {
+    return "Security Aware";
+  }
+
+  if (stats.falsePositives >= 2) {
+    return "Over-Reporter";
+  }
+
+  return "Needs Coaching";
+}
+
+// =======================================================
+// SECTION 22: FINAL DASHBOARD
+// =======================================================
+
 function showFinalDashboard() {
-  const cluePoints = emails.reduce((sum, email) => sum + (email.clueCount * 10), 0);
+  const cluePoints = emails.reduce((sum, email) => {
+    return sum + (email.clueCount * APP_CONFIG.scorePerClue);
+  }, 0);
+
   const decisionPoints = emails.length * 35;
   const totalPossible = cluePoints + decisionPoints;
 
   const safeScore = Math.max(score, 0);
-  const accuracy = totalPossible > 0 ? Math.round((safeScore / totalPossible) * 100) : 0;
+  const accuracy = totalPossible > 0
+    ? Math.round((safeScore / totalPossible) * 100)
+    : 0;
 
   let risk = "";
   let summary = "";
-  let behaviorProfile = "";
 
   if (accuracy >= 90) {
     risk = "Security Aware ✅";
@@ -675,30 +1131,448 @@ function showFinalDashboard() {
     summary = "You missed key phishing indicators and chose several unsafe responses. Additional phishing awareness practice is strongly recommended.";
   }
 
-  if (stats.riskyActions >= 3 || breachTriggered) {
-    behaviorProfile = "High Risk User";
-  } else if (stats.safeReports >= 3 && stats.falsePositives === 0) {
-    behaviorProfile = "Security Aware";
-  } else if (stats.falsePositives >= 2) {
-    behaviorProfile = "Over-Reporter";
-  } else {
-    behaviorProfile = "Needs Coaching";
+  if (byId("finalScore")) byId("finalScore").innerText = safeScore;
+  if (byId("accuracy")) byId("accuracy").innerText = `${accuracy}%`;
+  if (byId("risk")) byId("risk").innerText = risk;
+
+  if (byId("correctClassifications")) {
+    byId("correctClassifications").innerText = stats.correctClassifications;
   }
 
-  document.getElementById("finalScore").innerText = safeScore;
-  document.getElementById("accuracy").innerText = `${accuracy}%`;
-  document.getElementById("risk").innerText = risk;
+  if (byId("safeReports")) {
+    byId("safeReports").innerText = stats.safeReports;
+  }
 
-  document.getElementById("correctClassifications").innerText = stats.correctClassifications;
-  document.getElementById("safeReports").innerText = stats.safeReports;
-  document.getElementById("riskyActions").innerText = stats.riskyActions;
-  document.getElementById("falsePositives").innerText = stats.falsePositives;
-  document.getElementById("cluesFound").innerText = stats.cluesFound;
-  document.getElementById("emailsReviewed").innerText = stats.emailsReviewed;
-  document.getElementById("behaviorProfile").innerText = behaviorProfile;
-  document.getElementById("unsafeEscalations").innerText = stats.unsafeEscalations;
-  document.getElementById("breachTriggered").innerText = breachTriggered ? "Yes" : "No";
-  document.getElementById("coachSummary").innerText = summary;
+  if (byId("riskyActions")) {
+    byId("riskyActions").innerText = stats.riskyActions;
+  }
+
+  if (byId("falsePositives")) {
+    byId("falsePositives").innerText = stats.falsePositives;
+  }
+
+  if (byId("cluesFound")) {
+    byId("cluesFound").innerText = stats.cluesFound;
+  }
+
+  if (byId("emailsReviewed")) {
+    byId("emailsReviewed").innerText = stats.emailsReviewed;
+  }
+
+  if (byId("behaviorProfile")) {
+    byId("behaviorProfile").innerText = getBehaviorProfile();
+  }
+
+  if (byId("unsafeEscalations")) {
+    byId("unsafeEscalations").innerText = stats.unsafeEscalations;
+  }
+
+  if (byId("breachTriggered")) {
+    byId("breachTriggered").innerText = breachTriggered ? "Yes" : "No";
+  }
+
+  if (byId("coachSummary")) {
+    byId("coachSummary").innerText = summary;
+  }
 
   showScreen("dashboardScreen");
 }
+
+// =======================================================
+// SECTION 23: EXTRA SAFETY HELPERS
+// =======================================================
+
+function forceBreachIfNeeded() {
+  if (mistakes >= APP_CONFIG.maxMistakes) {
+    breachTriggered = true;
+    showScreen("breachScreen");
+  }
+}
+
+function safeReloadTraining() {
+  location.reload();
+}
+
+// =======================================================
+// SECTION 24: OPTIONAL UTILITIES
+// =======================================================
+
+function isCurrentEmailPhishing() {
+  const email = getCurrentEmail();
+  return email ? email.type === "phishing" : false;
+}
+
+function isCurrentEmailSafe() {
+  const email = getCurrentEmail();
+  return email ? email.type === "safe" : false;
+}
+
+function hasCurrentEmailBeenCompleted() {
+  return !!emailResults[currentEmailIndex];
+}
+
+function getTotalPossibleScore() {
+  const cluePoints = emails.reduce((sum, email) => {
+    return sum + (email.clueCount * APP_CONFIG.scorePerClue);
+  }, 0);
+
+  const decisionPoints = emails.length * 35;
+  return cluePoints + decisionPoints;
+}
+
+function getAccuracy() {
+  const totalPossible = getTotalPossibleScore();
+  if (!totalPossible) return 0;
+  return Math.round((Math.max(score, 0) / totalPossible) * 100);
+}
+
+// =======================================================
+// SECTION 25: STATE SNAPSHOTS
+// =======================================================
+
+function getScore() {
+  return score;
+}
+
+function getMistakes() {
+  return mistakes;
+}
+
+function getCurrentEmailIndex() {
+  return currentEmailIndex;
+}
+
+function getSelectedClassification() {
+  return selectedClassification;
+}
+
+function getSelectedAction() {
+  return selectedAction;
+}
+
+function getCluesFoundForCurrentEmail() {
+  return cluesFoundForCurrentEmail;
+}
+
+function getRiskyLinkOpenedForCurrentEmail() {
+  return riskyLinkOpenedForCurrentEmail;
+}
+
+function getOpenedEmailIndexesArray() {
+  return Array.from(openedEmailIndexes);
+}
+
+function getEmailResultsSnapshot() {
+  return [...emailResults];
+}
+
+function getStatsSnapshot() {
+  return { ...stats };
+}
+
+// =======================================================
+// SECTION 26: VALIDATION HELPERS
+// =======================================================
+
+function hasRequiredElements() {
+  const requiredIds = [
+    "briefingScreen",
+    "gameScreen",
+    "emailList",
+    "emailView",
+    "emailSubject",
+    "emailSender",
+    "emailBody",
+    "feedbackModal"
+  ];
+
+  return requiredIds.every((id) => !!byId(id));
+}
+
+function validateAppStructure() {
+  const valid = hasRequiredElements();
+  if (!valid) {
+    debugWarn("validateAppStructure: some required DOM elements are missing");
+  } else {
+    debugLog("validateAppStructure: OK");
+  }
+  return valid;
+}
+
+// =======================================================
+// SECTION 27: DEBUG HELPERS
+// =======================================================
+
+function debugState() {
+  console.log("CURRENT EMAIL INDEX:", currentEmailIndex);
+  console.log("SCORE:", score);
+  console.log("MISTAKES:", mistakes);
+  console.log("CLUES FOUND (CURRENT):", cluesFoundForCurrentEmail);
+  console.log("SELECTED CLASSIFICATION:", selectedClassification);
+  console.log("SELECTED ACTION:", selectedAction);
+  console.log("BREACH TRIGGERED:", breachTriggered);
+  console.log("EMAIL RESULTS:", emailResults);
+  console.log("STATS:", stats);
+  console.log("ACTIVE SCREEN:", activeScreenId);
+  console.log("APP INITIALIZED:", appInitialized);
+  console.log("EMAIL CLICKS BOUND:", emailClicksBound);
+}
+
+function debugScale() {
+  console.log("Window width:", window.innerWidth);
+  console.log("Window height:", window.innerHeight);
+  console.log("Base width:", APP_CONFIG.baseWidth);
+  console.log("Base height:", APP_CONFIG.baseHeight);
+}
+
+// =======================================================
+// SECTION 28: MANUAL CONTROL HELPERS
+// =======================================================
+
+function jumpToDashboard() {
+  showFinalDashboard();
+}
+
+function jumpToBreach() {
+  breachTriggered = true;
+  showScreen("breachScreen");
+}
+
+function reopenCurrentEmail() {
+  openEmail(currentEmailIndex);
+}
+
+function openFirstEmail() {
+  openEmail(0);
+}
+
+function openLastEmail() {
+  openEmail(emails.length - 1);
+}
+
+// =======================================================
+// SECTION 29: TRAINING SUMMARY HELPERS
+// =======================================================
+
+function getSummaryObject() {
+  return {
+    score,
+    mistakes,
+    accuracy: getAccuracy(),
+    behaviorProfile: getBehaviorProfile(),
+    breachTriggered,
+    reviewedCount: getReviewedCount(),
+    stats: { ...stats }
+  };
+}
+
+function printSummaryToConsole() {
+  console.log(getSummaryObject());
+}
+
+function getPerformanceBand() {
+  const accuracy = getAccuracy();
+
+  if (accuracy >= 90) return "excellent";
+  if (accuracy >= 75) return "good";
+  if (accuracy >= 50) return "fair";
+  return "poor";
+}
+
+// =======================================================
+// SECTION 30: PLACEHOLDER FUNCTIONS FOR HTML SAFETY
+// =======================================================
+
+function switchTab() {
+  // Placeholder so existing HTML won't break if this is still called somewhere.
+}
+
+function showFinalResultsDirectly() {
+  showFinalDashboard();
+}
+
+// =======================================================
+// SECTION 31: SAFE DOM PATCHES
+// =======================================================
+
+function ensureNoBlockingOverlay() {
+  const overlay = byId("tutorialOverlay");
+  if (overlay) {
+    overlay.style.pointerEvents = "none";
+  }
+}
+
+function ensureEmailListVisibleState() {
+  const emailList = byId("emailList");
+  const emailView = byId("emailView");
+
+  if (!emailList || !emailView) return;
+
+  if (activeScreenId === "gameScreen" && !isAnyModalOpen()) {
+    if (emailResults.every(Boolean)) {
+      emailList.style.display = "none";
+    }
+  }
+}
+
+function refreshBindingsAndLayout() {
+  rebindDynamicHandlersIfNeeded();
+  ensureNoBlockingOverlay();
+  ensureEmailListVisibleState();
+  scaleApp();
+}
+
+// =======================================================
+// SECTION 32: SAFE ACTION SHORTCUTS
+// =======================================================
+
+function chooseReportAndSubmit() {
+  setClassification("phishing");
+  setAction("report");
+  submitDecision();
+}
+
+function chooseSafeAndKeepAndSubmit() {
+  setClassification("safe");
+  setAction("keep");
+  submitDecision();
+}
+
+// =======================================================
+// SECTION 33: EMAIL RESULT HELPERS
+// =======================================================
+
+function getRemainingEmailCount() {
+  return emails.length - getReviewedCount();
+}
+
+function isTrainingComplete() {
+  return emailResults.every(Boolean);
+}
+
+function completeCurrentEmailManually() {
+  markEmailDone(currentEmailIndex);
+  emailResults[currentEmailIndex] = true;
+  updateHUD();
+}
+
+// =======================================================
+// SECTION 34: SAFE BIND REPAIR
+// =======================================================
+
+function rebindEmailClicksIfLost() {
+  const items = qsa(".clickable-mail");
+  let needsRebind = false;
+
+  items.forEach((item) => {
+    if (typeof item.onclick !== "function") {
+      needsRebind = true;
+    }
+  });
+
+  if (needsRebind) {
+    bindEmailClicks();
+    debugLog("rebindEmailClicksIfLost: rebound");
+  }
+}
+
+// =======================================================
+// SECTION 35: ESC KEY / KEYBOARD HELPERS
+// =======================================================
+
+function handleEscapeKey(event) {
+  if (event.key !== "Escape") return;
+
+  if (byId("feedbackModal") && byId("feedbackModal").style.display === "flex") {
+    closeModal("feedbackModal");
+    return;
+  }
+
+  if (byId("decisionModal") && byId("decisionModal").style.display === "flex") {
+    closeModal("decisionModal");
+    return;
+  }
+
+  if (byId("loginSimModal") && byId("loginSimModal").style.display === "flex") {
+    closeModal("loginSimModal");
+    return;
+  }
+}
+
+// =======================================================
+// SECTION 36: PAGE VISIBILITY HELPERS
+// =======================================================
+
+function handleVisibilityChange() {
+  if (document.hidden) {
+    debugLog("Document hidden");
+  } else {
+    debugLog("Document visible again");
+    refreshBindingsAndLayout();
+  }
+}
+
+// =======================================================
+// SECTION 37: WINDOW EVENTS
+// =======================================================
+
+window.addEventListener("resize", () => {
+  scaleApp();
+  rebindEmailClicksIfLost();
+});
+
+window.addEventListener("load", () => {
+  initializeApp();
+  validateAppStructure();
+});
+
+window.addEventListener("keydown", handleEscapeKey);
+document.addEventListener("visibilitychange", handleVisibilityChange);
+
+// =======================================================
+// SECTION 38: FAILSAFE INTERVAL
+// =======================================================
+
+let selfHealInterval = null;
+
+function startSelfHealLoop() {
+  if (selfHealInterval) return;
+
+  selfHealInterval = setInterval(() => {
+    if (!appInitialized) return;
+    rebindEmailClicksIfLost();
+  }, 2000);
+}
+
+function stopSelfHealLoop() {
+  if (!selfHealInterval) return;
+  clearInterval(selfHealInterval);
+  selfHealInterval = null;
+}
+
+startSelfHealLoop();
+
+// =======================================================
+// SECTION 39: EXTRA NO-OP COMPATIBILITY HELPERS
+// =======================================================
+
+function noop() {
+  return undefined;
+}
+
+function notImplementedYet() {
+  debugWarn("Called placeholder function");
+}
+
+function keepAliveDebug() {
+  debugLog("keepAliveDebug:", {
+    score,
+    mistakes,
+    activeScreenId,
+    currentEmailIndex
+  });
+}
+
+// =======================================================
+// SECTION 40: END OF FILE
+// =======================================================
